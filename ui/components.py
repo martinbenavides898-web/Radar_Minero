@@ -35,7 +35,6 @@ SPANISH_MONTHS = {
 
 
 def _render_html(html: str) -> None:
-    """Render raw HTML without Markdown interpreting indented tags as code."""
     st.html(textwrap.dedent(html).strip())
 
 
@@ -72,9 +71,14 @@ def render_header(
     )
 
 
-def render_market_ticker(items: Iterable[dict]) -> None:
+def render_market_ticker(items: Iterable[dict], is_demo: bool = False) -> None:
     ticker_items = "".join(_ticker_item(item) for item in items)
     ticker_track = ticker_items + ticker_items
+    note = (
+        '<p class="demo-market-note">Indicadores simulados; conexión oficial en la próxima etapa.</p>'
+        if is_demo
+        else ""
+    )
 
     _render_html(
         f"""
@@ -84,12 +88,10 @@ def render_market_ticker(items: Iterable[dict]) -> None:
                 MERCADOS
             </div>
             <div class="ticker-window">
-                <div class="ticker-track">
-                    {ticker_track}
-                </div>
+                <div class="ticker-track">{ticker_track}</div>
             </div>
         </section>
-        <p class="demo-market-note">Valores simulados en esta versión de diseño.</p>
+        {note}
         """
     )
 
@@ -119,6 +121,16 @@ def render_news_section(title: str, items: list[dict]) -> None:
         """
     )
 
+    if not items:
+        _render_html(
+            """
+            <div class="empty-state">
+                No fue posible cargar noticias de esta sección por ahora.
+            </div>
+            """
+        )
+        return
+
     for index, item in enumerate(items):
         render_news_card(item, eager=index == 0)
 
@@ -126,15 +138,27 @@ def render_news_section(title: str, items: list[dict]) -> None:
 def render_news_card(item: dict, eager: bool = False) -> None:
     loading = "eager" if eager else "lazy"
     url = escape(str(item["url"]), quote=True)
-    image_url = escape(str(item["image_url"]), quote=True)
     title = escape(str(item["title"]))
     title_attribute = escape(str(item["title"]), quote=True)
     category = escape(str(item["category"]))
     source = escape(str(item["source"]))
     published = escape(str(item["published"]))
     summary = escape(str(item["summary"]))
+    image_url = str(item.get("image_url", "")).strip()
 
-    # st.html avoids Markdown treating the multiline card markup as code.
+    if image_url:
+        image_block = (
+            f'<img class="news-image" src="{escape(image_url, quote=True)}" '
+            f'alt="" loading="{loading}" />'
+        )
+    else:
+        initials = "".join(word[0] for word in str(item["source"]).split()[:2]).upper()
+        image_block = (
+            '<div class="news-image-fallback" aria-hidden="true">'
+            f'<span>{escape(initials)}</span><small>RADAR MINERO</small>'
+            "</div>"
+        )
+
     _render_html(
         f"""
         <a
@@ -143,11 +167,20 @@ def render_news_card(item: dict, eager: bool = False) -> None:
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Abrir noticia: {title_attribute}"
-        ><article class="news-card"><div class="news-image-wrap"><img
-            class="news-image"
-            src="{image_url}"
-            alt=""
-            loading="{loading}"
-        /><div class="image-shade"></div><span class="category-pill">{category}</span></div><div class="news-content"><h3>{title}</h3><div class="news-meta"><span class="source-name">{source}</span><span class="meta-dot"></span><span>{published}</span></div><p>{summary}</p><div class="read-row"><span>Leer noticia original</span><span class="external-arrow">↗</span></div></div></article></a>
+        ><article class="news-card"><div class="news-image-wrap">{image_block}<div class="image-shade"></div><span class="category-pill">{category}</span></div><div class="news-content"><h3>{title}</h3><div class="news-meta"><span class="source-name">{source}</span><span class="meta-dot"></span><span>{published}</span></div><p>{summary}</p><div class="read-row"><span>Leer noticia original</span><span class="external-arrow">↗</span></div></div></article></a>
         """
     )
+
+
+def render_source_status(errors: list[str], has_news: bool) -> None:
+    if not errors:
+        return
+
+    if has_news:
+        message = "Algunas fuentes no respondieron; se mostraron las disponibles."
+        css_class = "source-note"
+    else:
+        message = "No fue posible actualizar las fuentes en este momento."
+        css_class = "source-note source-note-error"
+
+    _render_html(f'<p class="{css_class}">{escape(message)}</p>')

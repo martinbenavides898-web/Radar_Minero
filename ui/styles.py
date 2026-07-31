@@ -421,6 +421,54 @@ GLOBAL_CSS = r"""
             font-size: 0.85rem;
         }
     }
+    .news-image-fallback {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background:
+            radial-gradient(circle at 70% 20%, rgba(213, 132, 69, 0.28), transparent 32%),
+            linear-gradient(145deg, #1A2029, #090C11 72%);
+        color: var(--copper-light);
+    }
+
+    .news-image-fallback span {
+        font-size: clamp(3rem, 11vw, 5.5rem);
+        font-weight: 850;
+        letter-spacing: -0.08em;
+        opacity: 0.9;
+    }
+
+    .news-image-fallback small {
+        margin-top: 0.35rem;
+        color: var(--text-muted);
+        font-size: 0.58rem;
+        font-weight: 800;
+        letter-spacing: 0.19em;
+    }
+
+    .empty-state {
+        padding: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 1rem;
+        color: var(--text-muted);
+        background: var(--surface-soft);
+        font-size: 0.82rem;
+    }
+
+    .source-note {
+        margin: 1.5rem 0 0;
+        color: var(--text-muted);
+        font-size: 0.68rem;
+        text-align: center;
+    }
+
+    .source-note-error {
+        color: var(--negative);
+    }
+
 </style>
 """
 
