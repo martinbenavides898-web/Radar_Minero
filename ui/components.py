@@ -172,12 +172,25 @@ def render_news_card(item: dict, eager: bool = False) -> None:
     )
 
 
-def render_source_status(errors: list[str], has_news: bool) -> None:
+def render_source_status(
+    errors: list[str],
+    has_news: bool,
+    source_stats: dict[str, int] | None = None,
+) -> None:
+    source_stats = source_stats or {}
+    active = sum(1 for count in source_stats.values() if count > 0)
+    total = len(source_stats)
+
+    if total and has_news:
+        _render_html(
+            f'<p class="source-note">Fuentes activas en esta actualización: {active}/{total}</p>'
+        )
+
     if not errors:
         return
 
     if has_news:
-        message = "Algunas fuentes no respondieron; se mostraron las disponibles."
+        message = "Algunas fuentes no respondieron; se completó el radar con las demás."
         css_class = "source-note"
     else:
         message = "No fue posible actualizar las fuentes en este momento."

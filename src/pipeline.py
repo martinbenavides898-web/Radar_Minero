@@ -1,46 +1,59 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from data.fallback_news import FALLBACK_NEWS
-from .sources.codelco import fetch_codelco_news
-from .sources.mining_com import fetch_mining_com_news
-
-
-def _sort_key(item: dict) -> float:
-    published = item.get("published_at")
-    return published.timestamp() if published else 0.0
+from .deduplication import dedupe_news
+from .ranking import select_diverse
+from .source_registry import build_source_jobs
 
 
 def fetch_daily_news() -> dict:
     now = datetime.now(ZoneInfo("America/Santiago"))
     errors: list[str] = []
-    news: list[dict] = []
+    candidates: list[dict] = []
+    source_stats: dict[str, int] = {}
 
-    try:
-        news.extend(fetch_codelco_news(now=now, limit=4))
-    except Exception as exc:
-        errors.append(f"Codelco: {type(exc).__name__}")
+    jobs = build_source_jobs(now)
 
-    try:
-        news.extend(fetch_mining_com_news(now=now, limit=3))
-    except Exception as exc:
-        errors.append(f"MINING.com: {type(exc).__name__}")
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        future_map = {
+            executor.submit(fetcher): source_name
+            for source_name, fetcher in jobs
+        }
 
-    chile_count = sum(item.get("region") == "Chile" for item in news)
-    if chile_count < 4:
-        existing_urls = {item.get("url") for item in news}
-        for fallback in FALLBACK_NEWS:
-            if fallback["url"] not in existing_urls:
-                news.append(dict(fallback))
-            if sum(item.get("region") == "Chile" for item in news) >= 4:
-                break
+        for future in as_completed(future_map):
+            source_name = future_map[future]
+            try:
+                items = future.result()
+                source_stats[source_name] = len(items)
+                candidates.extend(items)
+            except Exception as exc:
+                source_stats[source_name] = 0
+                errors.append(f"{source_name}: {type(exc).__name__}")
 
-    news.sort(key=_sort_key, reverse=True)
+    candidates.extend(dict(item) for item in FALLBACK_NEWS)
+    unique = dedupe_news(candidates)
+
+    chile = select_diverse(
+        unique,
+        region="Chile",
+        limit=4,
+        now=now,
+    )
+    world = select_diverse(
+        unique,
+        region="Mundo",
+        limit=3,
+        now=now,
+    )
 
     return {
-        "news": news,
+        "chile": chile,
+        "world": world,
         "fetched_at": now,
         "errors": errors,
+        "source_stats": source_stats,
     }
