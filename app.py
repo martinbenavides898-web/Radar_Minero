@@ -111,7 +111,7 @@ render_source_status(
 st.html(
     """
     <footer class="app-footer">
-        Radar Minero · Versión 0.7 · Resúmenes editoriales uniformes
+        Radar Minero · Versión 0.8 · Diseño mineral orgánico
     </footer>
     """
 )

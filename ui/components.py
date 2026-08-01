@@ -65,6 +65,7 @@ def loading_skeleton_markup() -> str:
     """
 
 
+
 def render_header(
     title: str,
     subtitle: str,
@@ -77,13 +78,19 @@ def render_header(
     date_label = f"{weekday} {updated_at.day} de {month}"
     time_label = updated_at.strftime("%H:%M")
 
+    parts = title.split(" ", 1)
+    if len(parts) == 2:
+        title_html = f'{escape(parts[0])} <span class="title-accent">{escape(parts[1])}</span>'
+    else:
+        title_html = escape(title)
+
     _render_html(
         f"""
         <section class="app-header">
             <div class="brand-row">
                 <div>
                     <p class="eyebrow">INTELIGENCIA MINERA DIARIA</p>
-                    <h1>{escape(title)}</h1>
+                    <h1>{title_html}</h1>
                 </div>
                 {demo_badge}
             </div>
