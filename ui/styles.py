@@ -469,6 +469,12 @@ GLOBAL_CSS = r"""
         color: var(--negative);
     }
 
+    .section-availability-note {
+        max-width: 34rem;
+        margin: -0.25rem auto 1.7rem;
+        line-height: 1.5;
+    }
+
 </style>
 """
 

@@ -1,60 +1,48 @@
-# Radar Minero — Versión 0.4
+# Radar Minero — Versión 0.4.1
 
-Selección editorial inteligente de noticias mineras para lectura móvil.
+Corrección de diversidad internacional y recuperación de fuentes.
 
-## Qué cambia
+## Problema corregido
 
-- Cochilco fue eliminado como fuente de noticias por la fricción de acceso/registro.
-- Se agregó SONAMI como fuente chilena pública.
-- Se agregaron Rio Tinto y Glencore al bloque internacional.
-- El sistema ya no toma simplemente la primera noticia de cada página.
-- Se recopilan y deduplican candidatos de todas las fuentes.
-- Un ranking local reduce el conjunto a un máximo de 32 candidatos.
-- Gemini 3.5 Flash evalúa en una sola llamada:
-  - importancia global;
-  - relevancia para un estudiante de Ingeniería Civil de Minas;
-  - valor sustantivo versus contenido corporativo;
-  - historias que corresponden al mismo evento.
-- El orden que recibe Gemini se baraja para evitar sesgo hacia la primera posición.
-- La salida final mantiene diversidad de fuentes y una cuota flexible Chile/Mundo.
-- Si Gemini o la API fallan, la app continúa con el ranking local.
+La versión 0.4 podía completar las tres tarjetas de Mundo con tres publicaciones
+de una sola compañía cuando las demás fuentes no respondían.
 
-## Activar Gemini en Streamlit
+La versión 0.4.1 aplica estas reglas:
 
-1. Crea una API key en Google AI Studio.
-2. Abre tu app en Streamlit Community Cloud.
-3. Ve a `Manage app` → `Settings` → `Secrets`.
-4. Agrega:
+- Si responde una sola fuente internacional, muestra solo su noticia más importante.
+- Si responden dos fuentes, permite como máximo dos tarjetas de una misma fuente.
+- Si responden tres o más fuentes, las tres tarjetas pertenecen a fuentes diferentes.
+- Nunca rellena espacios solo para aparentar que existen más fuentes disponibles.
+- El bloque Chile permite como máximo dos noticias de un mismo medio.
+- El prefiltro entrega primero una oportunidad a cada fuente antes de incluir repetidas.
 
-```toml
-GEMINI_API_KEY = "TU_API_KEY"
-GEMINI_MODEL = "gemini-3.5-flash"
-```
+## Recuperación de fuentes
 
-5. Guarda los cambios y reinicia la app.
+Los sitios corporativos construidos con JavaScript pueden no exponer sus enlaces
+en el HTML inicial. Cuando esto ocurre, Radar Minero intenta recuperar noticias
+desde los sitemaps públicos y oficiales del mismo dominio.
 
-Nunca subas la API key a GitHub.
+Esto mejora especialmente los conectores de:
 
-## Flujo editorial
+- BHP
+- Rio Tinto
+- Glencore
+- Anglo American
+- Antofagasta plc
 
-```text
-Fuentes públicas
-    ↓
-Normalización
-    ↓
-Deduplicación local
-    ↓
-Prefiltro técnico (máx. 16 Chile + 16 Mundo)
-    ↓
-Evaluación agrupada con Gemini
-    ↓
-Combinación IA + recencia + autoridad
-    ↓
-Diversidad de fuentes
-    ↓
-4 Chile + 3 Mundo, con cuota flexible
-```
+## Gemini
+
+Gemini continúa evaluando importancia, relevancia y valor sustantivo.
+
+Después de seleccionar las noticias internacionales, una segunda llamada pequeña
+traduce únicamente las tarjetas elegidas:
+
+- título natural en español;
+- resumen de dos o tres oraciones;
+- sin agregar hechos que no aparezcan en la publicación recuperada.
+
+Si la traducción falla, la noticia sigue disponible con su texto original.
 
 ## Actualización
 
-Las noticias y el ranking se mantienen en caché durante tres horas. Solo se hace una llamada agrupada a Gemini por actualización, no una llamada por noticia.
+Las fuentes, el ranking y las traducciones permanecen en caché durante tres horas.

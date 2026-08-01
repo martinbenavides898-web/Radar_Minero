@@ -4,7 +4,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from .ai_ranker import DEFAULT_GEMINI_MODEL, evaluate_with_gemini
+from .ai_ranker import (
+    DEFAULT_GEMINI_MODEL,
+    evaluate_with_gemini,
+    translate_selected_world_stories,
+)
 from .deduplication import dedupe_news
 from .ranking import (
     apply_editorial_scores,
@@ -42,10 +46,12 @@ def fetch_daily_news(
                 source_stats[source_name] = 0
                 errors.append(f"{source_name}: {type(exc).__name__}")
 
-    # First remove exact/near-exact duplicates deterministically. Then cap the
-    # candidate pool before the AI call to control latency and token usage.
     unique = dedupe_news(candidates)
-    prefiltered = prefilter_candidates(unique, now=now, max_per_region=16)
+    prefiltered = prefilter_candidates(
+        unique,
+        now=now,
+        max_per_region=16,
+    )
 
     ai_items, ranking_error = evaluate_with_gemini(
         prefiltered,
@@ -62,6 +68,14 @@ def fetch_daily_news(
     )
     chile, world = select_balanced_feed(scored, total_limit=7)
 
+    translation_error: str | None = None
+    if ai_active and world:
+        world, translation_error = translate_selected_world_stories(
+            world,
+            api_key=gemini_api_key,
+            model=gemini_model,
+        )
+
     return {
         "chile": chile,
         "world": world,
@@ -70,5 +84,6 @@ def fetch_daily_news(
         "source_stats": source_stats,
         "ranking_mode": "gemini" if ai_active else "local",
         "ranking_error": ranking_error,
+        "translation_error": translation_error,
         "candidate_count": len(prefiltered),
     }

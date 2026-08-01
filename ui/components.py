@@ -71,7 +71,10 @@ def render_header(
     )
 
 
-def render_market_ticker(items: Iterable[dict], is_demo: bool = False) -> None:
+def render_market_ticker(
+    items: Iterable[dict],
+    is_demo: bool = False,
+) -> None:
     ticker_items = "".join(_ticker_item(item) for item in items)
     ticker_track = ticker_items + ticker_items
     note = (
@@ -111,7 +114,11 @@ def _ticker_item(item: dict) -> str:
     """
 
 
-def render_news_section(title: str, items: list[dict]) -> None:
+def render_news_section(
+    title: str,
+    items: list[dict],
+    expected_count: int | None = None,
+) -> None:
     _render_html(
         f"""
         <div class="section-heading">
@@ -134,6 +141,30 @@ def render_news_section(title: str, items: list[dict]) -> None:
     for index, item in enumerate(items):
         render_news_card(item, eager=index == 0)
 
+    if expected_count and len(items) < expected_count:
+        source_count = len(
+            {
+                str(item.get("source", "")).strip()
+                for item in items
+                if str(item.get("source", "")).strip()
+            }
+        )
+
+        if title.lower() == "mundo" and source_count <= 1:
+            message = (
+                "Solo una fuente internacional respondió con noticias válidas. "
+                "Radar Minero muestra únicamente su historia más importante para no simular diversidad."
+            )
+        else:
+            message = (
+                "Esta actualización tiene menos noticias disponibles porque algunas fuentes "
+                "no respondieron o publicaron contenido repetido."
+            )
+
+        _render_html(
+            f'<p class="source-note section-availability-note">{escape(message)}</p>'
+        )
+
 
 def render_news_card(item: dict, eager: bool = False) -> None:
     loading = "eager" if eager else "lazy"
@@ -152,7 +183,10 @@ def render_news_card(item: dict, eager: bool = False) -> None:
             f'alt="" loading="{loading}" />'
         )
     else:
-        initials = "".join(word[0] for word in str(item["source"]).split()[:2]).upper()
+        initials = "".join(
+            word[0]
+            for word in str(item["source"]).split()[:2]
+        ).upper()
         image_block = (
             '<div class="news-image-fallback" aria-hidden="true">'
             f'<span>{escape(initials)}</span><small>RADAR MINERO</small>'
@@ -178,6 +212,7 @@ def render_source_status(
     source_stats: dict[str, int] | None = None,
     ranking_mode: str = "local",
     ranking_error: str | None = None,
+    translation_error: str | None = None,
 ) -> None:
     source_stats = source_stats or {}
     active = sum(1 for count in source_stats.values() if count > 0)
@@ -196,6 +231,11 @@ def render_source_status(
     if ranking_error and has_news:
         _render_html(
             '<p class="source-note">Gemini no respondió; el radar aplicó el ranking local de respaldo.</p>'
+        )
+
+    if translation_error and has_news:
+        _render_html(
+            '<p class="source-note">La selección funcionó, pero alguna traducción internacional usó el texto original.</p>'
         )
 
     if not errors:

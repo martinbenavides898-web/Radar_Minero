@@ -110,6 +110,7 @@ def prefilter_candidates(
     now: datetime,
     max_per_region: int = 16,
 ) -> list[dict]:
+    """Keep strong candidates without letting one source monopolize Gemini's input."""
     selected: list[dict] = []
 
     for region in ("Chile", "Mundo"):
@@ -119,7 +120,37 @@ def prefilter_candidates(
             if item.get("region") == region
         ]
         regional.sort(key=lambda item: item["deterministic_score"], reverse=True)
-        selected.extend(regional[:max_per_region])
+
+        diversified: list[dict] = []
+        source_counts: dict[str, int] = {}
+
+        # First pass: one candidate per source.
+        for item in regional:
+            source = str(item.get("source", "Fuente"))
+            if source_counts.get(source, 0) >= 1:
+                continue
+            diversified.append(item)
+            source_counts[source] = 1
+            if len(diversified) >= max_per_region:
+                break
+
+        # Second pass: at most four candidates from any one source.
+        if len(diversified) < max_per_region:
+            selected_urls = {str(item.get("url", "")) for item in diversified}
+            for item in regional:
+                if len(diversified) >= max_per_region:
+                    break
+                url = str(item.get("url", ""))
+                source = str(item.get("source", "Fuente"))
+                if url in selected_urls:
+                    continue
+                if source_counts.get(source, 0) >= 4:
+                    continue
+                diversified.append(item)
+                selected_urls.add(url)
+                source_counts[source] = source_counts.get(source, 0) + 1
+
+        selected.extend(diversified[:max_per_region])
 
     return selected
 
@@ -136,7 +167,12 @@ def apply_editorial_scores(
         candidate = dict(item)
         authority = float(candidate.get("source_priority", 50))
         freshness = freshness_score(candidate, now)
-        local_score = float(candidate.get("deterministic_score", deterministic_score(candidate, now)))
+        local_score = float(
+            candidate.get(
+                "deterministic_score",
+                deterministic_score(candidate, now),
+            )
+        )
 
         if ai_active and candidate.get("ai_global_importance") is not None:
             global_importance = float(candidate["ai_global_importance"])
@@ -150,7 +186,10 @@ def apply_editorial_scores(
                 + freshness * 0.10
                 + authority * 0.05
             )
-            event_key = str(candidate.get("ai_event_key") or normalized_title(candidate.get("title", "")))
+            event_key = str(
+                candidate.get("ai_event_key")
+                or normalized_title(candidate.get("title", ""))
+            )
         else:
             final_score = local_score
             event_key = normalized_title(candidate.get("title", ""))
@@ -184,66 +223,105 @@ def dedupe_ai_events(items: list[dict]) -> list[dict]:
     return kept
 
 
+def _take_with_source_cap(
+    regional: list[dict],
+    *,
+    limit: int,
+    source_cap: int,
+    already_selected: list[dict] | None = None,
+) -> list[dict]:
+    selected = list(already_selected or [])
+    selected_urls = {str(item.get("url", "")) for item in selected}
+    source_counts: dict[str, int] = {}
+
+    for item in selected:
+        source = str(item.get("source", "Fuente"))
+        source_counts[source] = source_counts.get(source, 0) + 1
+
+    for item in regional:
+        if len(selected) >= limit:
+            break
+
+        url = str(item.get("url", ""))
+        source = str(item.get("source", "Fuente"))
+
+        if not url or url in selected_urls:
+            continue
+        if source_counts.get(source, 0) >= source_cap:
+            continue
+
+        selected.append(item)
+        selected_urls.add(url)
+        source_counts[source] = source_counts.get(source, 0) + 1
+
+    return selected[:limit]
+
+
 def _select_region(
     items: list[dict],
     *,
     region: str,
     limit: int,
-    excluded_urls: set[str] | None = None,
 ) -> list[dict]:
-    excluded_urls = set(excluded_urls or set())
     regional = [item for item in items if item.get("region") == region]
-    selected: list[dict] = []
-    selected_urls: set[str] = set(excluded_urls)
-    source_counts: dict[str, int] = {}
+    if not regional:
+        return []
 
-    # One source each first; a second item from the same source is only allowed
-    # when needed to complete the section.
-    for per_source_limit in (1, 2, 99):
-        for item in regional:
-            if len(selected) >= limit:
-                break
+    sources = {
+        str(item.get("source", "Fuente"))
+        for item in regional
+        if str(item.get("source", "")).strip()
+    }
+    source_count = len(sources)
 
-            url = str(item.get("url", ""))
-            source = str(item.get("source", "Fuente"))
+    # First pass always gives each responding source a fair chance.
+    selected = _take_with_source_cap(
+        regional,
+        limit=limit,
+        source_cap=1,
+    )
 
-            if not url or url in selected_urls:
-                continue
-            if source_counts.get(source, 0) >= per_source_limit:
-                continue
+    if region == "Mundo":
+        # Critical UX rule:
+        # - One available international source => show only its best story.
+        # - Two sources => a third card may repeat one source, never all three.
+        # - Three or more sources => three different sources.
+        if source_count <= 1:
+            return selected[:1]
+        if source_count == 2 and len(selected) < limit:
+            return _take_with_source_cap(
+                regional,
+                limit=limit,
+                source_cap=2,
+                already_selected=selected,
+            )
+        return selected[:limit]
 
-            selected.append(item)
-            selected_urls.add(url)
-            source_counts[source] = source_counts.get(source, 0) + 1
-
-        if len(selected) >= limit:
-            break
+    # Chile may use a second story from a source only when fewer than four
+    # distinct publishers are available. Never exceed two stories per source.
+    if len(selected) < limit:
+        selected = _take_with_source_cap(
+            regional,
+            limit=limit,
+            source_cap=2,
+            already_selected=selected,
+        )
 
     return selected[:limit]
 
 
-def select_balanced_feed(items: list[dict], total_limit: int = 7) -> tuple[list[dict], list[dict]]:
+def select_balanced_feed(
+    items: list[dict],
+    total_limit: int = 7,
+) -> tuple[list[dict], list[dict]]:
+    del total_limit  # Kept in the public signature for backwards compatibility.
+
     unique_events = dedupe_ai_events(items)
     chile = _select_region(unique_events, region="Chile", limit=4)
-    used_urls = {str(item.get("url", "")) for item in chile}
-    world = _select_region(unique_events, region="Mundo", limit=3, excluded_urls=used_urls)
+    world = _select_region(unique_events, region="Mundo", limit=3)
 
-    # Flexible quota: preserve seven useful stories when one region has fewer
-    # candidates, without forcing weak filler into the feed.
-    missing = total_limit - len(chile) - len(world)
-    if missing > 0:
-        used_urls.update(str(item.get("url", "")) for item in world)
-        remaining = [
-            item
-            for item in unique_events
-            if str(item.get("url", "")) not in used_urls
-        ]
-        for item in remaining[:missing]:
-            if item.get("region") == "Chile":
-                chile.append(item)
-            else:
-                world.append(item)
-
+    # Do not fill a missing international slot with a third item from the only
+    # responding company. Fewer honest cards are better than fake diversity.
     chile.sort(key=lambda item: item.get("final_score", 0), reverse=True)
     world.sort(key=lambda item: item.get("final_score", 0), reverse=True)
     return chile, world

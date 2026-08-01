@@ -43,7 +43,7 @@ GEMINI_MODEL = _read_secret("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
 
 @st.cache_data(ttl=10_800, max_entries=1, show_spinner=False)
 def load_news(ai_enabled: bool, model: str) -> dict:
-    """Refresh live sources and the editorial ranking at most every three hours."""
+    """Refresh sources and editorial selection at most every three hours."""
     return fetch_daily_news(
         gemini_api_key=GEMINI_API_KEY if ai_enabled else "",
         gemini_model=model,
@@ -64,8 +64,16 @@ render_header(
 
 render_market_ticker(MARKET_ITEMS, is_demo=True)
 
-render_news_section("Chile", result.get("chile", []))
-render_news_section("Mundo", result.get("world", []))
+render_news_section(
+    "Chile",
+    result.get("chile", []),
+    expected_count=4,
+)
+render_news_section(
+    "Mundo",
+    result.get("world", []),
+    expected_count=3,
+)
 
 render_source_status(
     errors=result.get("errors", []),
@@ -73,12 +81,13 @@ render_source_status(
     source_stats=result.get("source_stats", {}),
     ranking_mode=result.get("ranking_mode", "local"),
     ranking_error=result.get("ranking_error"),
+    translation_error=result.get("translation_error"),
 )
 
 st.html(
     """
     <footer class="app-footer">
-        Radar Minero · Versión 0.4 · Selección editorial inteligente
+        Radar Minero · Versión 0.4.1 · Diversidad internacional reforzada
     </footer>
     """
 )
