@@ -176,21 +176,33 @@ def render_source_status(
     errors: list[str],
     has_news: bool,
     source_stats: dict[str, int] | None = None,
+    ranking_mode: str = "local",
+    ranking_error: str | None = None,
 ) -> None:
     source_stats = source_stats or {}
     active = sum(1 for count in source_stats.values() if count > 0)
     total = len(source_stats)
 
     if total and has_news:
+        selection_label = (
+            "Selección editorial con Gemini"
+            if ranking_mode == "gemini"
+            else "Selección editorial local"
+        )
         _render_html(
-            f'<p class="source-note">Fuentes activas en esta actualización: {active}/{total}</p>'
+            f'<p class="source-note">{selection_label} · Fuentes activas: {active}/{total}</p>'
+        )
+
+    if ranking_error and has_news:
+        _render_html(
+            '<p class="source-note">Gemini no respondió; el radar aplicó el ranking local de respaldo.</p>'
         )
 
     if not errors:
         return
 
     if has_news:
-        message = "Algunas fuentes no respondieron; se completó el radar con las demás."
+        message = "Algunas fuentes no respondieron; se mostraron las disponibles."
         css_class = "source-note"
     else:
         message = "No fue posible actualizar las fuentes en este momento."

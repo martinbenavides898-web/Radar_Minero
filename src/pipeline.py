@@ -4,13 +4,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from data.fallback_news import FALLBACK_NEWS
+from .ai_ranker import DEFAULT_GEMINI_MODEL, evaluate_with_gemini
 from .deduplication import dedupe_news
-from .ranking import select_diverse
+from .ranking import (
+    apply_editorial_scores,
+    prefilter_candidates,
+    select_balanced_feed,
+)
 from .source_registry import build_source_jobs
 
 
-def fetch_daily_news() -> dict:
+def fetch_daily_news(
+    *,
+    gemini_api_key: str = "",
+    gemini_model: str = DEFAULT_GEMINI_MODEL,
+) -> dict:
     now = datetime.now(ZoneInfo("America/Santiago"))
     errors: list[str] = []
     candidates: list[dict] = []
@@ -18,7 +26,7 @@ def fetch_daily_news() -> dict:
 
     jobs = build_source_jobs(now)
 
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    with ThreadPoolExecutor(max_workers=7) as executor:
         future_map = {
             executor.submit(fetcher): source_name
             for source_name, fetcher in jobs
@@ -34,21 +42,25 @@ def fetch_daily_news() -> dict:
                 source_stats[source_name] = 0
                 errors.append(f"{source_name}: {type(exc).__name__}")
 
-    candidates.extend(dict(item) for item in FALLBACK_NEWS)
+    # First remove exact/near-exact duplicates deterministically. Then cap the
+    # candidate pool before the AI call to control latency and token usage.
     unique = dedupe_news(candidates)
+    prefiltered = prefilter_candidates(unique, now=now, max_per_region=16)
 
-    chile = select_diverse(
-        unique,
-        region="Chile",
-        limit=4,
+    ai_items, ranking_error = evaluate_with_gemini(
+        prefiltered,
         now=now,
+        api_key=gemini_api_key,
+        model=gemini_model,
     )
-    world = select_diverse(
-        unique,
-        region="Mundo",
-        limit=3,
+    ai_active = bool(gemini_api_key and not ranking_error)
+
+    scored = apply_editorial_scores(
+        ai_items,
         now=now,
+        ai_active=ai_active,
     )
+    chile, world = select_balanced_feed(scored, total_limit=7)
 
     return {
         "chile": chile,
@@ -56,4 +68,7 @@ def fetch_daily_news() -> dict:
         "fetched_at": now,
         "errors": errors,
         "source_stats": source_stats,
+        "ranking_mode": "gemini" if ai_active else "local",
+        "ranking_error": ranking_error,
+        "candidate_count": len(prefiltered),
     }
