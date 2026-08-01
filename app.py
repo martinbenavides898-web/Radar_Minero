@@ -6,8 +6,8 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
-from data.market_data import MARKET_ITEMS
 from src.ai_ranker import DEFAULT_GEMINI_MODEL
+from src.market_service import fetch_official_markets
 from src.pipeline import fetch_daily_news
 from ui.components import (
     render_header,
@@ -50,9 +50,16 @@ def load_news(ai_enabled: bool, model: str) -> dict:
     )
 
 
+@st.cache_data(ttl=21_600, max_entries=1, show_spinner=False)
+def load_markets() -> dict:
+    """Refresh official market indicators at most every six hours."""
+    return fetch_official_markets()
+
+
 now = datetime.now(ZoneInfo("America/Santiago"))
 
 with st.spinner("Analizando el radar minero…"):
+    market_result = load_markets()
     result = load_news(bool(GEMINI_API_KEY), GEMINI_MODEL)
 
 render_header(
@@ -62,7 +69,12 @@ render_header(
     is_demo=False,
 )
 
-render_market_ticker(MARKET_ITEMS, is_demo=True)
+render_market_ticker(
+    market_result.get("items", []),
+    source_label=market_result.get("source_label", "Banco Central de Chile"),
+    data_date=market_result.get("data_date"),
+    status=market_result.get("status", "unavailable"),
+)
 
 render_news_section(
     "Chile",
@@ -87,7 +99,7 @@ render_source_status(
 st.html(
     """
     <footer class="app-footer">
-        Radar Minero · Versión 0.4.1 · Diversidad internacional reforzada
+        Radar Minero · Versión 0.5 · Mercados oficiales
     </footer>
     """
 )

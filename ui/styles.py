@@ -475,6 +475,30 @@ GLOBAL_CSS = r"""
         line-height: 1.5;
     }
 
+    .market-source-note {
+        margin: 0.42rem 0 1.55rem;
+        color: var(--text-muted);
+        font-size: 0.64rem;
+        text-align: right;
+    }
+
+    .market-shell-unavailable {
+        min-height: 3.2rem;
+    }
+
+    .market-unavailable {
+        display: flex;
+        align-items: center;
+        padding: 0 1rem;
+        color: var(--text-muted);
+        font-size: 0.75rem;
+    }
+
+    .muted-dot {
+        background: var(--text-muted);
+        box-shadow: 0 0 0 4px rgba(116, 126, 140, 0.11);
+    }
+
 </style>
 """
 

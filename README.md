@@ -1,48 +1,43 @@
-# Radar Minero — Versión 0.4.1
+# Radar Minero — Versión 0.5
 
-Corrección de diversidad internacional y recuperación de fuentes.
+Integración de mercados oficiales del Banco Central de Chile.
 
-## Problema corregido
+## Indicadores
 
-La versión 0.4 podía completar las tres tarjetas de Mundo con tres publicaciones
-de una sola compañía cuando las demás fuentes no respondían.
+La cinta superior muestra:
 
-La versión 0.4.1 aplica estas reglas:
+- Dólar observado, pesos por dólar.
+- Precio del cobre, dólares por libra.
+- Precio del oro, dólares por onza troy.
 
-- Si responde una sola fuente internacional, muestra solo su noticia más importante.
-- Si responden dos fuentes, permite como máximo dos tarjetas de una misma fuente.
-- Si responden tres o más fuentes, las tres tarjetas pertenecen a fuentes diferentes.
-- Nunca rellena espacios solo para aparentar que existen más fuentes disponibles.
-- El bloque Chile permite como máximo dos noticias de un mismo medio.
-- El prefiltro entrega primero una oportunidad a cada fuente antes de incluir repetidas.
+Los valores se obtienen desde las series públicas de Indicadores Diarios del
+Banco Central de Chile. No se requiere registro ni una API key adicional.
 
-## Recuperación de fuentes
+## Variación
 
-Los sitios corporativos construidos con JavaScript pueden no exponer sus enlaces
-en el HTML inicial. Cuando esto ocurre, Radar Minero intenta recuperar noticias
-desde los sitemaps públicos y oficiales del mismo dominio.
+Cada indicador compara la observación más reciente con la observación oficial
+inmediatamente anterior:
 
-Esto mejora especialmente los conectores de:
+```text
+variación = (valor actual / valor anterior - 1) × 100
+```
 
-- BHP
-- Rio Tinto
-- Glencore
-- Anglo American
-- Antofagasta plc
+La flecha verde indica aumento y la roja disminución.
 
-## Gemini
+## Caché y respaldo
 
-Gemini continúa evaluando importancia, relevancia y valor sustantivo.
+- Noticias: caché de 3 horas.
+- Mercados: caché independiente de 6 horas.
+- Si el Banco Central falla temporalmente, la aplicación intenta usar el último
+  resultado oficial guardado durante la vida del servidor.
+- Si nunca ha existido una descarga correcta, la cinta informa que los datos no
+  están disponibles. Nunca vuelve a mostrar cifras simuladas.
 
-Después de seleccionar las noticias internacionales, una segunda llamada pequeña
-traduce únicamente las tarjetas elegidas:
+## Archivos nuevos
 
-- título natural en español;
-- resumen de dos o tres oraciones;
-- sin agregar hechos que no aparezcan en la publicación recuperada.
+```text
+src/market_service.py
+```
 
-Si la traducción falla, la noticia sigue disponible con su texto original.
-
-## Actualización
-
-Las fuentes, el ranking y las traducciones permanecen en caché durante tres horas.
+El antiguo archivo `data/market_data.py` fue eliminado porque contenía valores
+de demostración.

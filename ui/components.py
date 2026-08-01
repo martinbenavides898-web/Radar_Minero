@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from html import escape
 from typing import Iterable
 import textwrap
@@ -71,17 +71,58 @@ def render_header(
     )
 
 
+def _format_market_date(value: str | None) -> str:
+    if not value:
+        return ""
+
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError:
+        return ""
+
+    return f"{parsed.day} de {SPANISH_MONTHS[parsed.month]}"
+
+
 def render_market_ticker(
     items: Iterable[dict],
-    is_demo: bool = False,
+    *,
+    source_label: str,
+    data_date: str | None,
+    status: str,
 ) -> None:
+    items = list(items)
+
+    if not items:
+        _render_html(
+            """
+            <section class="market-shell market-shell-unavailable" aria-label="Indicadores mineros">
+                <div class="market-label">
+                    <span class="live-dot muted-dot"></span>
+                    MERCADOS
+                </div>
+                <div class="market-unavailable">
+                    Datos oficiales temporalmente no disponibles
+                </div>
+            </section>
+            <p class="market-source-note">La app no mostrará valores simulados.</p>
+            """
+        )
+        return
+
     ticker_items = "".join(_ticker_item(item) for item in items)
     ticker_track = ticker_items + ticker_items
-    note = (
-        '<p class="demo-market-note">Indicadores simulados; conexión oficial en la próxima etapa.</p>'
-        if is_demo
-        else ""
-    )
+
+    date_label = _format_market_date(data_date)
+    note_parts = [source_label]
+    if date_label:
+        note_parts.append(f"datos al {date_label}")
+
+    if status == "partial":
+        note_parts.append("actualización parcial")
+    elif status == "snapshot":
+        note_parts.append("respaldo guardado")
+
+    note = " · ".join(note_parts)
 
     _render_html(
         f"""
@@ -94,7 +135,7 @@ def render_market_ticker(
                 <div class="ticker-track">{ticker_track}</div>
             </div>
         </section>
-        {note}
+        <p class="market-source-note">{escape(note)}</p>
         """
     )
 
