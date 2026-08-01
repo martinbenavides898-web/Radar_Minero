@@ -1,59 +1,61 @@
-# Radar Minero — Versión 0.6
+# Radar Minero — Versión 0.7
 
-Versión centrada en estabilidad, continuidad y rendimiento.
+Resúmenes editoriales uniformes con Gemini.
 
-## Mejoras
-
-### Último feed válido
-
-Cuando la actualización actual no consigue suficientes noticias:
-
-1. Radar Minero carga las fuentes que sí respondieron.
-2. Completa únicamente los espacios faltantes con el último feed exitoso.
-3. Marca discretamente esas tarjetas como `RESPALDO`.
-4. Nunca presenta una noticia antigua como si acabara de ser descargada.
-
-El snapshot se guarda durante la ejecución del servidor en:
+## Nuevo flujo
 
 ```text
-.cache/news_snapshot.json
-/tmp/radar_minero_news_snapshot.json
+Fuentes
+  ↓
+Deduplicación
+  ↓
+Ranking y diversidad
+  ↓
+Selección final de 4 Chile + 3 Mundo
+  ↓
+Una sola edición editorial con Gemini
+  ↓
+Tarjetas
 ```
 
-Streamlit Community Cloud puede borrar estos archivos al reconstruir completamente
-el contenedor. Por eso existe también un respaldo inicial empaquetado, usado solo
-cuando nunca se ha podido crear un snapshot real.
+Gemini no resume todas las noticias candidatas. Edita solamente las historias que
+ya ganaron un espacio en el feed, reduciendo tiempo y consumo.
 
-### Reintentos y límites
+## Qué edita
 
-- Reintentos automáticos para errores transitorios, límites de tasa y timeouts.
-- Backoff corto para no bloquear la interfaz.
-- Presupuesto máximo aproximado por fuente.
-- Descarga paralela con aislamiento de fallas.
-- Una fuente rota no detiene las demás.
+Para cada tarjeta:
 
-### Diagnóstico discreto
+- título profesional y directo;
+- español natural para noticias chilenas e internacionales;
+- resumen objetivo de aproximadamente 55 a 85 palabras;
+- dos o tres oraciones;
+- hecho central, actores, proyecto y consecuencia inmediata;
+- cifras únicamente cuando ya estaban presentes en el material recuperado.
 
-La parte inferior muestra solamente información útil:
+## Controles contra alucinaciones
+
+La aplicación valida cada respuesta antes de mostrarla:
+
+- no acepta cifras nuevas que no aparezcan en el título o resumen original;
+- rechaza títulos o resúmenes con extensiones anómalas;
+- rechaza frases editoriales como “por qué importa” o “la noticia destaca”;
+- exige que cada identificador corresponda a una historia seleccionada;
+- si una tarjeta no supera la validación, conserva automáticamente el texto original.
+
+Por eso la aplicación puede indicar, por ejemplo:
 
 ```text
-Selección con Gemini · 7/11 fuentes · 8.4 s
+Selección con Gemini · 6 resúmenes editados · 7/11 fuentes · 8.6 s
 ```
 
-Cuando corresponde también informa:
+## Respaldo
 
-- cantidad de tarjetas de respaldo;
-- último feed válido;
-- caída parcial de fuentes;
-- uso automático del ranking local.
+- Si Gemini falla completamente, las siete noticias siguen disponibles.
+- Si solo una edición falla, únicamente esa tarjeta conserva el texto original.
+- El último feed válido guarda los resúmenes ya editados.
+- La caché de noticias continúa siendo de tres horas.
 
-Los nombres técnicos de excepciones no aparecen en la interfaz.
+## Sin nuevas pantallas
 
-### Carga
-
-La aplicación muestra tarjetas skeleton mientras consulta mercados, recopila las
-fuentes y realiza el ranking editorial.
-
-## Sin feature creep
-
-La versión 0.6 no agrega favoritos, buscador, cuentas ni navegación adicional.
+La interfaz y la navegación no cambian. La mejora está concentrada en la calidad
+y consistencia del contenido.

@@ -288,7 +288,9 @@ def render_source_status(
     source_health: dict[str, dict] | None = None,
     ranking_mode: str = "local",
     ranking_error: str | None = None,
-    translation_error: str | None = None,
+    editorial_error: str | None = None,
+    editorial_count: int = 0,
+    editorial_enabled: bool = False,
     feed_mode: str = "live",
     snapshot_used_count: int = 0,
     snapshot_age_hours: float | None = None,
@@ -306,6 +308,12 @@ def render_source_status(
     )
 
     status_parts = [selection_label]
+
+    if editorial_count:
+        status_parts.append(f"{editorial_count} resúmenes editados")
+    elif editorial_enabled:
+        status_parts.append("texto original de respaldo")
+
     if total:
         status_parts.append(f"{active}/{total} fuentes")
     if elapsed_seconds is not None:
@@ -333,12 +341,14 @@ def render_source_status(
 
     if ranking_error and has_news:
         _render_html(
-            '<p class="source-note">Gemini no respondió; se aplicó el ranking local automáticamente.</p>'
+            '<p class="source-note">Gemini no respondió al ranking; se aplicó la selección local automáticamente.</p>'
         )
-    if translation_error and has_news:
+
+    if editorial_error and has_news:
         _render_html(
-            '<p class="source-note">Alguna noticia internacional conservó su texto original.</p>'
+            '<p class="source-note">Algunas tarjetas conservaron el texto original para evitar agregar información no respaldada.</p>'
         )
+
     if failed and has_news:
         _render_html(
             '<p class="source-note">Algunas fuentes no respondieron; el resto del radar siguió funcionando.</p>'

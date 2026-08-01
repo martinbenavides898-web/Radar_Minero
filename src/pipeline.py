@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime
 import time
 from zoneinfo import ZoneInfo
 
 from .ai_ranker import (
     DEFAULT_GEMINI_MODEL,
+    editorialize_selected_stories,
     evaluate_with_gemini,
-    translate_selected_world_stories,
 )
 from .deduplication import dedupe_news
 from .ranking import (
@@ -63,6 +63,7 @@ def _snapshot_candidates(snapshot: dict, now: datetime) -> list[dict]:
         penalty = max(penalty, 36.0)
 
     candidates: list[dict] = []
+
     for region_key in ("chile", "world"):
         for item in _refresh_published_labels(snapshot.get(region_key, []), now):
             copy = dict(item)
@@ -82,11 +83,11 @@ def _merge_with_snapshot(
     *,
     current_items: list[dict],
     snapshot: dict,
+    now: datetime,
 ) -> tuple[list[dict], list[dict], int]:
-    snapshot_items = _snapshot_candidates(snapshot, datetime.now(ZoneInfo("America/Santiago")))
+    snapshot_items = _snapshot_candidates(snapshot, now)
     combined = dedupe_news(current_items + snapshot_items)
 
-    # dedupe_news preserves source-priority ordering, so re-sort by editorial score.
     combined.sort(
         key=lambda item: (
             0 if item.get("from_snapshot") else 1,
@@ -94,6 +95,7 @@ def _merge_with_snapshot(
         ),
         reverse=True,
     )
+
     chile, world = select_balanced_feed(combined, total_limit=7)
     used = sum(1 for item in chile + world if item.get("from_snapshot"))
     return chile, world, used
@@ -105,7 +107,7 @@ def _select_live_feed(
     now: datetime,
     gemini_api_key: str,
     gemini_model: str,
-) -> tuple[list[dict], list[dict], str, str | None, str | None, int]:
+) -> tuple[list[dict], list[dict], str, str | None, int]:
     unique = dedupe_news(candidates)
     prefiltered = prefilter_candidates(
         unique,
@@ -128,20 +130,11 @@ def _select_live_feed(
     )
     chile, world = select_balanced_feed(scored, total_limit=7)
 
-    translation_error: str | None = None
-    if ai_active and world:
-        world, translation_error = translate_selected_world_stories(
-            world,
-            api_key=gemini_api_key,
-            model=gemini_model,
-        )
-
     return (
         chile,
         world,
         "gemini" if ai_active else "local",
         ranking_error,
-        translation_error,
         len(prefiltered),
     )
 
@@ -170,6 +163,7 @@ def fetch_daily_news(
 
             for future in as_completed(future_map):
                 source_name = future_map[future]
+
                 try:
                     _, items, duration = future.result()
                     source_stats[source_name] = len(items)
@@ -194,7 +188,6 @@ def fetch_daily_news(
             live_world,
             ranking_mode,
             ranking_error,
-            translation_error,
             candidate_count,
         ) = _select_live_feed(
             candidates=candidates,
@@ -207,7 +200,6 @@ def fetch_daily_news(
         live_world = []
         ranking_mode = "local"
         ranking_error = f"{type(exc).__name__}: {str(exc)[:120]}"
-        translation_error = None
         candidate_count = 0
         errors.append(f"Pipeline: {type(exc).__name__}")
 
@@ -221,35 +213,64 @@ def fetch_daily_news(
     if snapshot is None:
         snapshot = load_bootstrap_snapshot(now=now)
 
-    needs_support = len(live_chile) < CHILE_TARGET or len(live_world) < WORLD_TARGET
+    needs_support = (
+        len(live_chile) < CHILE_TARGET
+        or len(live_world) < WORLD_TARGET
+    )
 
     if needs_support and snapshot:
         chile, world, snapshot_used_count = _merge_with_snapshot(
             current_items=live_items,
             snapshot=snapshot,
+            now=now,
         )
         snapshot_age_hours = round(float(snapshot.get("age_hours", 0.0)), 1)
 
         if live_items and snapshot_used_count:
             feed_mode = "mixed"
         elif snapshot_used_count:
-            feed_mode = "bootstrap" if snapshot.get("_origin") == "bootstrap" else "snapshot"
+            feed_mode = (
+                "bootstrap"
+                if snapshot.get("_origin") == "bootstrap"
+                else "snapshot"
+            )
             saved_at = snapshot.get("saved_at")
             if isinstance(saved_at, datetime):
                 content_updated_at = saved_at
     else:
         chile, world = live_chile, live_world
 
-    # Save only genuinely healthy, current feeds. A stale item must never reset
-    # the snapshot age and masquerade as fresh content.
+    editorial_error: str | None = None
+    editorial_count = 0
+    editorial_enabled = bool(gemini_api_key and ranking_mode == "gemini")
+
+    if editorial_enabled and (chile or world):
+        edited_feed, editorial_error, editorial_count = editorialize_selected_stories(
+            chile + world,
+            api_key=gemini_api_key,
+            model=gemini_model,
+        )
+        chile = [
+            item
+            for item in edited_feed
+            if item.get("region") == "Chile"
+        ]
+        world = [
+            item
+            for item in edited_feed
+            if item.get("region") == "Mundo"
+        ]
+
+    # Persist the final edited live feed, never a mixed feed containing stale cards.
     if (
-        len(live_chile) >= 3
-        and len(live_world) >= 2
-        and not any(item.get("from_snapshot") for item in live_items)
+        feed_mode == "live"
+        and len(chile) >= 3
+        and len(world) >= 2
+        and not any(item.get("from_snapshot") for item in chile + world)
     ):
         save_news_snapshot(
-            chile=live_chile,
-            world=live_world,
+            chile=chile,
+            world=world,
             saved_at=now,
             ranking_mode=ranking_mode,
         )
@@ -266,7 +287,9 @@ def fetch_daily_news(
         "source_health": source_health,
         "ranking_mode": ranking_mode,
         "ranking_error": ranking_error,
-        "translation_error": translation_error,
+        "editorial_error": editorial_error,
+        "editorial_count": editorial_count,
+        "editorial_enabled": editorial_enabled,
         "candidate_count": candidate_count,
         "feed_mode": feed_mode,
         "snapshot_used_count": snapshot_used_count,

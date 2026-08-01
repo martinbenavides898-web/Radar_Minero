@@ -99,7 +99,9 @@ render_source_status(
     source_health=result.get("source_health", {}),
     ranking_mode=result.get("ranking_mode", "local"),
     ranking_error=result.get("ranking_error"),
-    translation_error=result.get("translation_error"),
+    editorial_error=result.get("editorial_error"),
+    editorial_count=result.get("editorial_count", 0),
+    editorial_enabled=result.get("editorial_enabled", False),
     feed_mode=result.get("feed_mode", "live"),
     snapshot_used_count=result.get("snapshot_used_count", 0),
     snapshot_age_hours=result.get("snapshot_age_hours"),
@@ -109,7 +111,7 @@ render_source_status(
 st.html(
     """
     <footer class="app-footer">
-        Radar Minero · Versión 0.6 · Estabilidad y rendimiento
+        Radar Minero · Versión 0.7 · Resúmenes editoriales uniformes
     </footer>
     """
 )
