@@ -499,6 +499,138 @@ GLOBAL_CSS = r"""
         box-shadow: 0 0 0 4px rgba(116, 126, 140, 0.11);
     }
 
+    .loading-shell {
+        padding: 0.85rem 0 2rem;
+    }
+
+    .skeleton {
+        position: relative;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.065);
+    }
+
+    .skeleton::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        transform: translateX(-100%);
+        background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255, 255, 255, 0.075),
+            transparent
+        );
+        animation: radar-shimmer 1.35s infinite;
+    }
+
+    @keyframes radar-shimmer {
+        100% { transform: translateX(100%); }
+    }
+
+    .skeleton-eyebrow {
+        width: 9.5rem;
+        height: 0.65rem;
+        margin: 0.8rem 0 0.65rem;
+    }
+
+    .skeleton-title {
+        width: min(78%, 23rem);
+        height: 2.8rem;
+        border-radius: 0.75rem;
+    }
+
+    .skeleton-subtitle {
+        width: min(68%, 20rem);
+        height: 0.9rem;
+        margin-top: 0.95rem;
+    }
+
+    .skeleton-ticker {
+        width: 100%;
+        height: 3.2rem;
+        margin-top: 1.4rem;
+        border-radius: 0.95rem;
+    }
+
+    .loading-caption {
+        margin: 0.72rem 0 1.25rem;
+        color: var(--text-muted);
+        font-size: 0.7rem;
+        text-align: center;
+    }
+
+    .skeleton-card {
+        overflow: hidden;
+        margin-bottom: 1rem;
+        border: 1px solid var(--border);
+        border-radius: 1.18rem;
+        background: var(--surface-soft);
+    }
+
+    .skeleton-image {
+        width: 100%;
+        height: 13rem;
+        border-radius: 0;
+    }
+
+    .skeleton-card-body {
+        padding: 1rem;
+    }
+
+    .skeleton-line {
+        width: 78%;
+        height: 0.78rem;
+        margin-bottom: 0.7rem;
+    }
+
+    .skeleton-line-wide {
+        width: 94%;
+        height: 1.15rem;
+    }
+
+    .skeleton-line-short {
+        width: 48%;
+    }
+
+    .skeleton-card-secondary {
+        opacity: 0.62;
+    }
+
+    .backup-badge {
+        position: absolute;
+        right: 0.82rem;
+        bottom: 0.72rem;
+        padding: 0.38rem 0.52rem;
+        border: 1px solid rgba(255, 255, 255, 0.11);
+        border-radius: 999px;
+        background: rgba(7, 9, 13, 0.76);
+        color: var(--text-muted);
+        font-size: 0.56rem;
+        font-weight: 820;
+        letter-spacing: 0.08em;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+    }
+
+    .source-summary {
+        margin-top: 1.8rem;
+        color: var(--text-soft);
+        font-weight: 650;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .skeleton::after {
+            animation: none;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .skeleton-image {
+            height: 10.8rem;
+        }
+    }
+
 </style>
 """
 

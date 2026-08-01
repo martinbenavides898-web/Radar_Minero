@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 import json
+import random
 import re
+import time
 import unicodedata
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
@@ -15,7 +17,7 @@ import requests
 USER_AGENT = (
     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) "
     "AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1 "
-    "RadarMinero/0.3"
+    "RadarMinero/0.6"
 )
 
 DEFAULT_HEADERS = {
@@ -25,6 +27,7 @@ DEFAULT_HEADERS = {
     "Cache-Control": "no-cache",
 }
 
+RETRYABLE_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 KEEP_QUERY_PARAMS = {"noticia"}
 
 KEYWORD_CATEGORIES = [
@@ -40,19 +43,64 @@ KEYWORD_CATEGORIES = [
 ]
 
 
-def get_html(url: str, timeout: int = 14) -> tuple[str, str]:
-    response = requests.get(
+def request_content(
+    url: str,
+    *,
+    timeout: tuple[float, float] = (3.5, 8.0),
+    retries: int = 2,
+) -> tuple[bytes, str]:
+    last_error: Exception | None = None
+
+    for attempt in range(retries + 1):
+        try:
+            response = requests.get(
+                url,
+                headers=DEFAULT_HEADERS,
+                timeout=timeout,
+                allow_redirects=True,
+            )
+
+            if response.status_code in RETRYABLE_STATUS_CODES and attempt < retries:
+                retry_after = response.headers.get("Retry-After", "")
+                try:
+                    delay = min(1.8, max(0.25, float(retry_after)))
+                except ValueError:
+                    delay = 0.32 * (2**attempt) + random.uniform(0.0, 0.12)
+                time.sleep(delay)
+                continue
+
+            response.raise_for_status()
+            return response.content, response.url
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as exc:
+            last_error = exc
+            if attempt >= retries:
+                break
+            time.sleep(0.32 * (2**attempt) + random.uniform(0.0, 0.12))
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("La fuente no respondió.")
+
+
+def get_html(
+    url: str,
+    timeout: tuple[float, float] = (3.5, 8.0),
+    retries: int = 2,
+) -> tuple[str, str]:
+    content, final_url = request_content(
         url,
-        headers=DEFAULT_HEADERS,
         timeout=timeout,
-        allow_redirects=True,
+        retries=retries,
     )
-    response.raise_for_status()
-    return response.text, response.url
+    return content.decode("utf-8", errors="replace"), final_url
 
 
-def soup_from_url(url: str, timeout: int = 14) -> tuple[BeautifulSoup, str]:
-    html, final_url = get_html(url, timeout=timeout)
+def soup_from_url(
+    url: str,
+    timeout: tuple[float, float] = (3.5, 8.0),
+    retries: int = 2,
+) -> tuple[BeautifulSoup, str]:
+    html, final_url = get_html(url, timeout=timeout, retries=retries)
     return BeautifulSoup(html, "html.parser"), final_url
 
 
@@ -96,7 +144,6 @@ def canonical_url(url: str) -> str:
         for key, value in parse_qsl(parts.query, keep_blank_values=False)
         if key.lower() in KEEP_QUERY_PARAMS
     ]
-
     return urlunsplit((scheme, netloc, path, urlencode(kept_query), ""))
 
 
@@ -124,7 +171,6 @@ def meta_content(
 
 def _json_ld_values(value: Any) -> list[dict]:
     found: list[dict] = []
-
     if isinstance(value, dict):
         found.append(value)
         for child in value.values():
@@ -132,7 +178,6 @@ def _json_ld_values(value: Any) -> list[dict]:
     elif isinstance(value, list):
         for child in value:
             found.extend(_json_ld_values(child))
-
     return found
 
 
@@ -157,7 +202,6 @@ def parse_datetime(value: str) -> datetime | None:
         return None
 
     normalized = clean_text(value).replace("Z", "+00:00")
-
     try:
         parsed = datetime.fromisoformat(normalized)
         if parsed.tzinfo is None:
@@ -205,7 +249,6 @@ def parse_datetime(value: str) -> datetime | None:
             return parsed.replace(tzinfo=timezone.utc)
         except ValueError:
             continue
-
     return None
 
 
@@ -231,7 +274,6 @@ def extract_published_at(soup: BeautifulSoup) -> datetime | None:
         parsed = parse_datetime(candidate)
         if parsed:
             return parsed
-
     return None
 
 
@@ -263,14 +305,9 @@ def first_article_image(soup: BeautifulSoup, base_url: str) -> str:
         image_tag = soup.select_one(selector)
         if not image_tag:
             continue
-        image = (
-            image_tag.get("src")
-            or image_tag.get("data-src")
-            or image_tag.get("data-lazy-src")
-        )
+        image = image_tag.get("src") or image_tag.get("data-src") or image_tag.get("data-lazy-src")
         if image:
             return absolute_url(base_url, str(image))
-
     return ""
 
 
@@ -282,7 +319,6 @@ def extract_article_metadata(url: str) -> dict[str, Any]:
         or meta_content(soup, name="twitter:title")
         or clean_text(soup.h1.get_text(" ", strip=True) if soup.h1 else "")
     )
-
     description = (
         meta_content(soup, property_name="og:description")
         or meta_content(soup, name="description")
@@ -325,7 +361,6 @@ def classify_category(title: str, summary: str = "") -> str:
 def humanize_published(value: datetime | None, now: datetime) -> str:
     if value is None:
         return "Publicación reciente"
-
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
 
@@ -354,5 +389,4 @@ def humanize_published(value: datetime | None, now: datetime) -> str:
         return "Ayer"
     if days < 7:
         return f"Hace {days} días"
-
     return value.astimezone(now.tzinfo).strftime("%d/%m/%Y")

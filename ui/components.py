@@ -38,6 +38,33 @@ def _render_html(html: str) -> None:
     st.html(textwrap.dedent(html).strip())
 
 
+def loading_skeleton_markup() -> str:
+    return """
+    <section class="loading-shell" aria-label="Cargando Radar Minero">
+        <div class="skeleton skeleton-eyebrow"></div>
+        <div class="skeleton skeleton-title"></div>
+        <div class="skeleton skeleton-subtitle"></div>
+        <div class="skeleton skeleton-ticker"></div>
+        <div class="loading-caption">Revisando y priorizando las fuentes mineras…</div>
+        <div class="skeleton-card">
+            <div class="skeleton skeleton-image"></div>
+            <div class="skeleton-card-body">
+                <div class="skeleton skeleton-line skeleton-line-wide"></div>
+                <div class="skeleton skeleton-line"></div>
+                <div class="skeleton skeleton-line skeleton-line-short"></div>
+            </div>
+        </div>
+        <div class="skeleton-card skeleton-card-secondary">
+            <div class="skeleton skeleton-image"></div>
+            <div class="skeleton-card-body">
+                <div class="skeleton skeleton-line skeleton-line-wide"></div>
+                <div class="skeleton skeleton-line"></div>
+            </div>
+        </div>
+    </section>
+    """
+
+
 def render_header(
     title: str,
     subtitle: str,
@@ -64,7 +91,7 @@ def render_header(
             <div class="update-row">
                 <span>{escape(date_label)}</span>
                 <span class="update-dot"></span>
-                <span>Actualizado {escape(time_label)}</span>
+                <span>Contenido actualizado {escape(time_label)}</span>
             </div>
         </section>
         """
@@ -74,12 +101,10 @@ def render_header(
 def _format_market_date(value: str | None) -> str:
     if not value:
         return ""
-
     try:
         parsed = date.fromisoformat(value)
     except ValueError:
         return ""
-
     return f"{parsed.day} de {SPANISH_MONTHS[parsed.month]}"
 
 
@@ -116,13 +141,10 @@ def render_market_ticker(
     note_parts = [source_label]
     if date_label:
         note_parts.append(f"datos al {date_label}")
-
     if status == "partial":
         note_parts.append("actualización parcial")
     elif status == "snapshot":
         note_parts.append("respaldo guardado")
-
-    note = " · ".join(note_parts)
 
     _render_html(
         f"""
@@ -135,7 +157,7 @@ def render_market_ticker(
                 <div class="ticker-track">{ticker_track}</div>
             </div>
         </section>
-        <p class="market-source-note">{escape(note)}</p>
+        <p class="market-source-note">{escape(" · ".join(note_parts))}</p>
         """
     )
 
@@ -217,6 +239,11 @@ def render_news_card(item: dict, eager: bool = False) -> None:
     published = escape(str(item["published"]))
     summary = escape(str(item["summary"]))
     image_url = str(item.get("image_url", "")).strip()
+    backup_badge = (
+        '<span class="backup-badge">RESPALDO</span>'
+        if item.get("from_snapshot")
+        else ""
+    )
 
     if image_url:
         image_block = (
@@ -224,10 +251,7 @@ def render_news_card(item: dict, eager: bool = False) -> None:
             f'alt="" loading="{loading}" />'
         )
     else:
-        initials = "".join(
-            word[0]
-            for word in str(item["source"]).split()[:2]
-        ).upper()
+        initials = "".join(word[0] for word in str(item["source"]).split()[:2]).upper()
         image_block = (
             '<div class="news-image-fallback" aria-hidden="true">'
             f'<span>{escape(initials)}</span><small>RADAR MINERO</small>'
@@ -242,51 +266,84 @@ def render_news_card(item: dict, eager: bool = False) -> None:
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Abrir noticia: {title_attribute}"
-        ><article class="news-card"><div class="news-image-wrap">{image_block}<div class="image-shade"></div><span class="category-pill">{category}</span></div><div class="news-content"><h3>{title}</h3><div class="news-meta"><span class="source-name">{source}</span><span class="meta-dot"></span><span>{published}</span></div><p>{summary}</p><div class="read-row"><span>Leer noticia original</span><span class="external-arrow">↗</span></div></div></article></a>
+        ><article class="news-card"><div class="news-image-wrap">{image_block}<div class="image-shade"></div><span class="category-pill">{category}</span>{backup_badge}</div><div class="news-content"><h3>{title}</h3><div class="news-meta"><span class="source-name">{source}</span><span class="meta-dot"></span><span>{published}</span></div><p>{summary}</p><div class="read-row"><span>Leer noticia original</span><span class="external-arrow">↗</span></div></div></article></a>
         """
     )
+
+
+def _format_snapshot_age(hours: float | None) -> str:
+    if hours is None:
+        return ""
+    if hours < 1:
+        return "menos de 1 h"
+    if hours < 24:
+        return f"{int(round(hours))} h"
+    return f"{int(round(hours / 24))} días"
 
 
 def render_source_status(
     errors: list[str],
     has_news: bool,
     source_stats: dict[str, int] | None = None,
+    source_health: dict[str, dict] | None = None,
     ranking_mode: str = "local",
     ranking_error: str | None = None,
     translation_error: str | None = None,
+    feed_mode: str = "live",
+    snapshot_used_count: int = 0,
+    snapshot_age_hours: float | None = None,
+    elapsed_seconds: float | None = None,
 ) -> None:
     source_stats = source_stats or {}
+    source_health = source_health or {}
     active = sum(1 for count in source_stats.values() if count > 0)
     total = len(source_stats)
 
-    if total and has_news:
-        selection_label = (
-            "Selección editorial con Gemini"
-            if ranking_mode == "gemini"
-            else "Selección editorial local"
+    selection_label = (
+        "Selección con Gemini"
+        if ranking_mode == "gemini"
+        else "Selección local"
+    )
+
+    status_parts = [selection_label]
+    if total:
+        status_parts.append(f"{active}/{total} fuentes")
+    if elapsed_seconds is not None:
+        status_parts.append(f"{elapsed_seconds:.1f} s")
+
+    if feed_mode == "mixed":
+        status_parts.append(f"{snapshot_used_count} de respaldo")
+    elif feed_mode == "snapshot":
+        status_parts.append(
+            f"último feed válido de hace {_format_snapshot_age(snapshot_age_hours)}"
         )
+    elif feed_mode == "bootstrap":
+        status_parts.append("respaldo inicial")
+
+    if has_news:
         _render_html(
-            f'<p class="source-note">{selection_label} · Fuentes activas: {active}/{total}</p>'
+            f'<p class="source-note source-summary">{" · ".join(escape(part) for part in status_parts)}</p>'
         )
+
+    failed = sum(
+        1
+        for health in source_health.values()
+        if health.get("status") == "failed"
+    )
 
     if ranking_error and has_news:
         _render_html(
-            '<p class="source-note">Gemini no respondió; el radar aplicó el ranking local de respaldo.</p>'
+            '<p class="source-note">Gemini no respondió; se aplicó el ranking local automáticamente.</p>'
         )
-
     if translation_error and has_news:
         _render_html(
-            '<p class="source-note">La selección funcionó, pero alguna traducción internacional usó el texto original.</p>'
+            '<p class="source-note">Alguna noticia internacional conservó su texto original.</p>'
         )
-
-    if not errors:
-        return
-
-    if has_news:
-        message = "Algunas fuentes no respondieron; se mostraron las disponibles."
-        css_class = "source-note"
-    else:
-        message = "No fue posible actualizar las fuentes en este momento."
-        css_class = "source-note source-note-error"
-
-    _render_html(f'<p class="{css_class}">{escape(message)}</p>')
+    if failed and has_news:
+        _render_html(
+            '<p class="source-note">Algunas fuentes no respondieron; el resto del radar siguió funcionando.</p>'
+        )
+    elif not has_news:
+        _render_html(
+            '<p class="source-note source-note-error">No fue posible cargar noticias ni un respaldo válido.</p>'
+        )

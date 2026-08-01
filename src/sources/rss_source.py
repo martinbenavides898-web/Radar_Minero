@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import calendar
 from datetime import datetime, timezone
+import time
 
 from bs4 import BeautifulSoup
 import feedparser
-import requests
 
 from .common import (
-    DEFAULT_HEADERS,
     classify_category,
     clean_text,
     extract_article_metadata,
     humanize_published,
+    request_content,
     truncate,
 )
 
@@ -41,7 +41,6 @@ def _entry_image(entry) -> str:
     image = soup.find("img")
     if image:
         return str(image.get("src") or image.get("data-src") or "")
-
     return ""
 
 
@@ -53,15 +52,23 @@ def fetch_rss_source(
     now: datetime,
     limit: int = 2,
     source_priority: int = 50,
+    time_budget_seconds: float = 18.0,
 ) -> list[dict]:
+    started = time.monotonic()
+    deadline = started + time_budget_seconds
     feed = None
     last_error: Exception | None = None
 
     for feed_url in feed_urls:
+        if time.monotonic() >= deadline:
+            break
         try:
-            response = requests.get(feed_url, headers=DEFAULT_HEADERS, timeout=14)
-            response.raise_for_status()
-            candidate = feedparser.parse(response.content)
+            content, _ = request_content(
+                feed_url,
+                timeout=(3.2, 7.0),
+                retries=2,
+            )
+            candidate = feedparser.parse(content)
             if candidate.entries:
                 feed = candidate
                 break
@@ -76,6 +83,9 @@ def fetch_rss_source(
     news: list[dict] = []
 
     for entry in feed.entries[: max(limit * 4, limit)]:
+        if time.monotonic() >= deadline:
+            break
+
         title = clean_text(entry.get("title", ""))
         url = str(entry.get("link", "")).strip()
         summary = truncate(entry.get("summary", "") or entry.get("description", ""))
@@ -85,7 +95,7 @@ def fetch_rss_source(
         if not title or not url:
             continue
 
-        if not image_url or not summary:
+        if (not image_url or not summary) and time.monotonic() < deadline:
             try:
                 metadata = extract_article_metadata(url)
                 url = metadata.get("url") or url

@@ -1,43 +1,59 @@
-# Radar Minero — Versión 0.5
+# Radar Minero — Versión 0.6
 
-Integración de mercados oficiales del Banco Central de Chile.
+Versión centrada en estabilidad, continuidad y rendimiento.
 
-## Indicadores
+## Mejoras
 
-La cinta superior muestra:
+### Último feed válido
 
-- Dólar observado, pesos por dólar.
-- Precio del cobre, dólares por libra.
-- Precio del oro, dólares por onza troy.
+Cuando la actualización actual no consigue suficientes noticias:
 
-Los valores se obtienen desde las series públicas de Indicadores Diarios del
-Banco Central de Chile. No se requiere registro ni una API key adicional.
+1. Radar Minero carga las fuentes que sí respondieron.
+2. Completa únicamente los espacios faltantes con el último feed exitoso.
+3. Marca discretamente esas tarjetas como `RESPALDO`.
+4. Nunca presenta una noticia antigua como si acabara de ser descargada.
 
-## Variación
-
-Cada indicador compara la observación más reciente con la observación oficial
-inmediatamente anterior:
+El snapshot se guarda durante la ejecución del servidor en:
 
 ```text
-variación = (valor actual / valor anterior - 1) × 100
+.cache/news_snapshot.json
+/tmp/radar_minero_news_snapshot.json
 ```
 
-La flecha verde indica aumento y la roja disminución.
+Streamlit Community Cloud puede borrar estos archivos al reconstruir completamente
+el contenedor. Por eso existe también un respaldo inicial empaquetado, usado solo
+cuando nunca se ha podido crear un snapshot real.
 
-## Caché y respaldo
+### Reintentos y límites
 
-- Noticias: caché de 3 horas.
-- Mercados: caché independiente de 6 horas.
-- Si el Banco Central falla temporalmente, la aplicación intenta usar el último
-  resultado oficial guardado durante la vida del servidor.
-- Si nunca ha existido una descarga correcta, la cinta informa que los datos no
-  están disponibles. Nunca vuelve a mostrar cifras simuladas.
+- Reintentos automáticos para errores transitorios, límites de tasa y timeouts.
+- Backoff corto para no bloquear la interfaz.
+- Presupuesto máximo aproximado por fuente.
+- Descarga paralela con aislamiento de fallas.
+- Una fuente rota no detiene las demás.
 
-## Archivos nuevos
+### Diagnóstico discreto
+
+La parte inferior muestra solamente información útil:
 
 ```text
-src/market_service.py
+Selección con Gemini · 7/11 fuentes · 8.4 s
 ```
 
-El antiguo archivo `data/market_data.py` fue eliminado porque contenía valores
-de demostración.
+Cuando corresponde también informa:
+
+- cantidad de tarjetas de respaldo;
+- último feed válido;
+- caída parcial de fuentes;
+- uso automático del ranking local.
+
+Los nombres técnicos de excepciones no aparecen en la interfaz.
+
+### Carga
+
+La aplicación muestra tarjetas skeleton mientras consulta mercados, recopila las
+fuentes y realiza el ranking editorial.
+
+## Sin feature creep
+
+La versión 0.6 no agrega favoritos, buscador, cuentas ni navegación adicional.

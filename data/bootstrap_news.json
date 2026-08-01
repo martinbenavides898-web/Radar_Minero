@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "saved_at": "2026-07-31T12:00:00-04:00",
+  "ranking_mode": "bootstrap",
+  "chile": [
+    {
+      "region": "Chile",
+      "category": "SEGURIDAD",
+      "title": "Codelco reafirma su compromiso con la seguridad tras la conmemoración en El Teniente",
+      "source": "Codelco",
+      "published_at": "2026-07-31T12:00:00-04:00",
+      "summary": "La estatal informó medidas vinculadas con seguridad, monitoreo geotécnico y prevención de riesgos en minería profunda.",
+      "image_url": "",
+      "url": "https://www.codelco.com/prensa/2026/a-un-ano-del-accidente-en-el-teniente",
+      "source_priority": 92,
+      "final_score": 44,
+      "event_key": "codelco-seguridad-el-teniente"
+    },
+    {
+      "region": "Chile",
+      "category": "COBRE · PROYECTOS",
+      "title": "Codelco y Anglo American avanzan con el acuerdo Andina–Los Bronces",
+      "source": "Codelco",
+      "published_at": "2026-06-24T12:00:00-04:00",
+      "summary": "El acuerdo busca desarrollar un plan minero conjunto y aprovechar coordinadamente los recursos e infraestructura del distrito.",
+      "image_url": "",
+      "url": "https://www.codelco.com/prensa/2026/anglo-american-y-codelco-completan-acuerdo-andina-los-bronces",
+      "source_priority": 92,
+      "final_score": 41,
+      "event_key": "acuerdo-andina-los-bronces"
+    },
+    {
+      "region": "Chile",
+      "category": "AUTOMATIZACIÓN",
+      "title": "Minería Digital 2026 aborda automatización, inteligencia artificial y electrificación",
+      "source": "Reporte Minero",
+      "published_at": "2026-07-27T12:00:00-04:00",
+      "summary": "El encuentro reúne experiencias de compañías, universidades y especialistas sobre tecnologías digitales aplicadas a operaciones mineras.",
+      "image_url": "",
+      "url": "https://www.reporteminero.cl/noticia/noticias/2026/07/mineria-digital-2026-congreso-600-participantes-140-presentaciones",
+      "source_priority": 78,
+      "final_score": 38,
+      "event_key": "mineria-digital-2026"
+    },
+    {
+      "region": "Chile",
+      "category": "MINERÍA SUBTERRÁNEA",
+      "title": "Codelco impulsa la electrificación de la minería subterránea junto a CEA-Liten",
+      "source": "Codelco",
+      "published_at": "2026-06-11T12:00:00-04:00",
+      "summary": "El acuerdo contempla simulaciones, pruebas de baterías y desarrollo tecnológico para operaciones subterráneas electrificadas.",
+      "image_url": "",
+      "url": "https://www.codelco.com/prensa/2026/codelco-e-instituto-frances-cea-liten-sellan-acuerdo-de-desarrollo",
+      "source_priority": 92,
+      "final_score": 40,
+      "event_key": "codelco-cea-liten-electrificacion"
+    }
+  ],
+  "world": [
+    {
+      "region": "Mundo",
+      "category": "PROYECTOS",
+      "title": "BHP aprueba el proyecto Ministers North para extender sus operaciones de hierro en Australia",
+      "source": "BHP",
+      "published_at": "2026-07-16T12:00:00+00:00",
+      "summary": "La compañía aprobó el desarrollo del proyecto en Pilbara, aprovechando infraestructura existente para sostener producción futura.",
+      "image_url": "",
+      "url": "https://www.bhp.com/news/media-centre/releases/2026/07/bhp-backs-future-of-wa-iron-ore-with-ministers-north-project-approved",
+      "source_priority": 90,
+      "final_score": 42,
+      "event_key": "bhp-ministers-north"
+    },
+    {
+      "region": "Mundo",
+      "category": "ELECTRIFICACIÓN",
+      "title": "BHP, Rio Tinto y Caterpillar prueban camiones mineros eléctricos en Pilbara",
+      "source": "BHP",
+      "published_at": "2026-06-23T12:00:00+00:00",
+      "summary": "La prueba busca recopilar información operacional para avanzar en la electrificación de equipos mineros de gran tamaño.",
+      "image_url": "",
+      "url": "https://www.bhp.com/news/media-centre/releases/2026/06/bhp-rio-tinto-and-caterpillar-launch-battery-electric-haul-truck-trial-in-the-pilbara",
+      "source_priority": 90,
+      "final_score": 43,
+      "event_key": "battery-electric-haul-truck-pilbara"
+    },
+    {
+      "region": "Mundo",
+      "category": "COBRE · PROYECTOS",
+      "title": "Anglo American y Codelco completan el acuerdo para integrar Los Bronces y Andina",
+      "source": "Anglo American",
+      "published_at": "2026-06-24T12:00:00+00:00",
+      "summary": "Las compañías avanzan hacia un plan minero conjunto que permita sumar producción de cobre usando recursos e infraestructura coordinadamente.",
+      "image_url": "",
+      "url": "https://www.angloamerican.com/media/press-releases/2026/24-06-2026",
+      "source_priority": 89,
+      "final_score": 45,
+      "event_key": "acuerdo-andina-los-bronces"
+    },
+    {
+      "region": "Mundo",
+      "category": "PRODUCCIÓN DE COBRE",
+      "title": "Antofagasta publica su reporte de producción del segundo trimestre de 2026",
+      "source": "Antofagasta plc",
+      "published_at": "2026-07-15T12:00:00+00:00",
+      "summary": "El reporte actualiza producción, costos y avance de proyectos en Los Pelambres, Centinela, Antucoya y Zaldívar.",
+      "image_url": "",
+      "url": "https://www.antofagasta.co.uk/investors/news/2026/q2-2026-production-report/",
+      "source_priority": 88,
+      "final_score": 41,
+      "event_key": "antofagasta-q2-2026-production"
+    }
+  ]
+}

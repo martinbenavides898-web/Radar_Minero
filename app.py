@@ -10,6 +10,7 @@ from src.ai_ranker import DEFAULT_GEMINI_MODEL
 from src.market_service import fetch_official_markets
 from src.pipeline import fetch_daily_news
 from ui.components import (
+    loading_skeleton_markup,
     render_header,
     render_market_ticker,
     render_news_section,
@@ -29,7 +30,6 @@ apply_global_styles()
 
 
 def _read_secret(name: str, default: str = "") -> str:
-    """Read Streamlit secrets first, then environment variables."""
     try:
         value = st.secrets.get(name, default)
     except (FileNotFoundError, KeyError):
@@ -43,7 +43,6 @@ GEMINI_MODEL = _read_secret("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
 
 @st.cache_data(ttl=10_800, max_entries=1, show_spinner=False)
 def load_news(ai_enabled: bool, model: str) -> dict:
-    """Refresh sources and editorial selection at most every three hours."""
     return fetch_daily_news(
         gemini_api_key=GEMINI_API_KEY if ai_enabled else "",
         gemini_model=model,
@@ -52,20 +51,26 @@ def load_news(ai_enabled: bool, model: str) -> dict:
 
 @st.cache_data(ttl=21_600, max_entries=1, show_spinner=False)
 def load_markets() -> dict:
-    """Refresh official market indicators at most every six hours."""
     return fetch_official_markets()
 
 
 now = datetime.now(ZoneInfo("America/Santiago"))
+loading_placeholder = st.empty()
+loading_placeholder.markdown(
+    loading_skeleton_markup(),
+    unsafe_allow_html=True,
+)
 
-with st.spinner("Analizando el radar minero…"):
+try:
     market_result = load_markets()
     result = load_news(bool(GEMINI_API_KEY), GEMINI_MODEL)
+finally:
+    loading_placeholder.empty()
 
 render_header(
     title="Radar Minero",
     subtitle="Lo importante de la minería, en menos de cinco minutos.",
-    updated_at=result.get("fetched_at", now),
+    updated_at=result.get("content_updated_at", result.get("fetched_at", now)),
     is_demo=False,
 )
 
@@ -91,15 +96,20 @@ render_source_status(
     errors=result.get("errors", []),
     has_news=bool(result.get("chile") or result.get("world")),
     source_stats=result.get("source_stats", {}),
+    source_health=result.get("source_health", {}),
     ranking_mode=result.get("ranking_mode", "local"),
     ranking_error=result.get("ranking_error"),
     translation_error=result.get("translation_error"),
+    feed_mode=result.get("feed_mode", "live"),
+    snapshot_used_count=result.get("snapshot_used_count", 0),
+    snapshot_age_hours=result.get("snapshot_age_hours"),
+    elapsed_seconds=result.get("elapsed_seconds"),
 )
 
 st.html(
     """
     <footer class="app-footer">
-        Radar Minero · Versión 0.5 · Mercados oficiales
+        Radar Minero · Versión 0.6 · Estabilidad y rendimiento
     </footer>
     """
 )

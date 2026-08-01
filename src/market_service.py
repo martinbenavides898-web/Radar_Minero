@@ -15,7 +15,10 @@ import requests
 
 
 CHILE_TZ = ZoneInfo("America/Santiago")
-SNAPSHOT_PATH = Path("/tmp/radar_minero_market_snapshot.json")
+SNAPSHOT_PATHS = (
+    Path(__file__).resolve().parents[1] / ".cache" / "market_snapshot.json",
+    Path("/tmp/radar_minero_market_snapshot.json"),
+)
 
 HEADERS = {
     "User-Agent": (
@@ -123,15 +126,32 @@ def _parse_chilean_number(value: str) -> float | None:
         return None
 
 
-def _download(url: str, timeout: int = 18) -> str:
-    response = requests.get(
-        url,
-        headers=HEADERS,
-        timeout=timeout,
-        allow_redirects=True,
-    )
-    response.raise_for_status()
-    return response.text
+def _download(url: str, timeout: int = 14) -> str:
+    last_error: Exception | None = None
+
+    for attempt in range(3):
+        try:
+            response = requests.get(
+                url,
+                headers=HEADERS,
+                timeout=(3.5, timeout),
+                allow_redirects=True,
+            )
+            if response.status_code in {408, 425, 429, 500, 502, 503, 504} and attempt < 2:
+                import time
+                time.sleep(0.35 * (2**attempt))
+                continue
+            response.raise_for_status()
+            return response.text
+        except (requests.Timeout, requests.ConnectionError, requests.HTTPError) as exc:
+            last_error = exc
+            if attempt < 2:
+                import time
+                time.sleep(0.35 * (2**attempt))
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("Banco Central no respondió.")
 
 
 def _extract_year(soup: BeautifulSoup) -> int:
@@ -319,24 +339,38 @@ def _series_to_item(series: dict) -> dict:
 
 
 def _save_snapshot(payload: dict) -> None:
-    try:
-        SNAPSHOT_PATH.write_text(
-            json.dumps(payload, ensure_ascii=False),
-            encoding="utf-8",
-        )
-    except OSError:
-        pass
+    encoded = json.dumps(payload, ensure_ascii=False)
+
+    for path in SNAPSHOT_PATHS:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(path.suffix + ".tmp")
+            temporary.write_text(encoded, encoding="utf-8")
+            temporary.replace(path)
+        except OSError:
+            continue
 
 
 def _load_snapshot() -> dict | None:
-    try:
-        payload = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    candidates: list[dict] = []
+
+    for path in SNAPSHOT_PATHS:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        if isinstance(payload, dict) and payload.get("items"):
+            candidates.append(payload)
+
+    if not candidates:
         return None
 
-    if not isinstance(payload, dict) or not payload.get("items"):
-        return None
-    return payload
+    candidates.sort(
+        key=lambda payload: str(payload.get("fetched_at", "")),
+        reverse=True,
+    )
+    return candidates[0]
 
 
 def fetch_official_markets() -> dict:

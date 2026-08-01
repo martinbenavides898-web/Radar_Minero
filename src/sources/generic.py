@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 import re
+import time
 from urllib.parse import urljoin, urlsplit
 
 from .common import (
@@ -29,6 +30,7 @@ class ListingSource:
     source_priority: int = 50
     allow_external_image: bool = True
     sitemap_urls: tuple[str, ...] = field(default_factory=tuple)
+    time_budget_seconds: float = 18.0
 
 
 def _same_host(left: str, right: str) -> bool:
@@ -47,7 +49,6 @@ def _candidate_title(anchor) -> str:
         heading = parent.find(["h1", "h2", "h3", "h4", "h5", "h6"])
         if heading:
             return clean_text(heading.get_text(" ", strip=True))
-
     return title
 
 
@@ -62,7 +63,6 @@ def _default_sitemap_urls(listing_url: str) -> tuple[str, ...]:
 
 
 def _xml_locations(xml_text: str) -> list[str]:
-    # Namespace-independent extraction works for both sitemap indexes and urlsets.
     return [
         clean_text(value)
         for value in re.findall(
@@ -79,9 +79,9 @@ def _collect_sitemap_candidates(
     *,
     include: re.Pattern,
     excludes: list[re.Pattern],
+    deadline: float,
 ) -> list[tuple[str, str]]:
     sitemap_urls = list(config.sitemap_urls)
-
     if not sitemap_urls:
         for listing_url in config.listing_urls:
             sitemap_urls.extend(_default_sitemap_urls(listing_url))
@@ -91,7 +91,12 @@ def _collect_sitemap_candidates(
     candidates: list[tuple[str, str]] = []
     seen_articles: set[str] = set()
 
-    while queue and len(visited) < 12 and len(candidates) < config.candidate_limit:
+    while (
+        queue
+        and time.monotonic() < deadline
+        and len(visited) < 10
+        and len(candidates) < config.candidate_limit
+    ):
         sitemap_url, depth = queue.pop(0)
         canonical_map = canonical_url(sitemap_url)
         if canonical_map in visited:
@@ -99,7 +104,11 @@ def _collect_sitemap_candidates(
         visited.add(canonical_map)
 
         try:
-            xml_text, final_url = get_html(sitemap_url, timeout=10)
+            xml_text, final_url = get_html(
+                sitemap_url,
+                timeout=(3.0, 6.0),
+                retries=1,
+            )
         except Exception:
             continue
 
@@ -121,10 +130,12 @@ def _collect_sitemap_candidates(
                     value,
                 ),
             )
-            queue.extend((url, depth + 1) for url in preferred[:7])
+            queue.extend((url, depth + 1) for url in preferred[:6])
             continue
 
         for article_url in locations:
+            if time.monotonic() >= deadline:
+                break
             if not _same_host(article_url, final_url):
                 continue
             if not include.search(article_url):
@@ -138,7 +149,6 @@ def _collect_sitemap_candidates(
 
             seen_articles.add(canonical)
             candidates.append((article_url, ""))
-
             if len(candidates) >= config.candidate_limit:
                 break
 
@@ -146,26 +156,32 @@ def _collect_sitemap_candidates(
 
 
 def fetch_listing_source(config: ListingSource, now: datetime) -> list[dict]:
+    started = time.monotonic()
+    deadline = started + config.time_budget_seconds
     include = re.compile(config.include_pattern, re.IGNORECASE)
-    excludes = [
-        re.compile(pattern, re.IGNORECASE)
-        for pattern in config.exclude_patterns
-    ]
+    excludes = [re.compile(pattern, re.IGNORECASE) for pattern in config.exclude_patterns]
 
     candidates: list[tuple[str, str]] = []
     seen: set[str] = set()
 
     for listing_url in config.listing_urls:
+        if time.monotonic() >= deadline:
+            break
         try:
-            soup, final_listing_url = soup_from_url(listing_url)
+            soup, final_listing_url = soup_from_url(
+                listing_url,
+                timeout=(3.2, 7.0),
+                retries=2,
+            )
         except Exception:
             continue
 
         for anchor in soup.find_all("a", href=True):
+            if time.monotonic() >= deadline:
+                break
+
             raw_href = str(anchor.get("href", "")).strip()
-            if not raw_href or raw_href.startswith(
-                ("#", "mailto:", "tel:", "javascript:")
-            ):
+            if not raw_href or raw_href.startswith(("#", "mailto:", "tel:", "javascript:")):
                 continue
 
             article_url = urljoin(final_listing_url, raw_href)
@@ -187,20 +203,21 @@ def fetch_listing_source(config: ListingSource, now: datetime) -> list[dict]:
 
             seen.add(canonical)
             candidates.append((article_url, title))
-
             if len(candidates) >= config.candidate_limit:
                 break
 
         if len(candidates) >= config.candidate_limit:
             break
 
-    # JS-heavy corporate newsrooms often expose no article links in the initial
-    # HTML. Their public sitemaps provide a stable, official fallback.
-    if len(candidates) < min(3, config.candidate_limit):
+    if (
+        time.monotonic() < deadline
+        and len(candidates) < min(3, config.candidate_limit)
+    ):
         for article_url, title in _collect_sitemap_candidates(
             config,
             include=include,
             excludes=excludes,
+            deadline=deadline,
         ):
             canonical = canonical_url(article_url)
             if canonical in seen:
@@ -213,6 +230,9 @@ def fetch_listing_source(config: ListingSource, now: datetime) -> list[dict]:
     news: list[dict] = []
 
     for article_url, listing_title in candidates:
+        if time.monotonic() >= deadline:
+            break
+
         try:
             metadata = extract_article_metadata(article_url)
         except Exception:
@@ -231,17 +251,10 @@ def fetch_listing_source(config: ListingSource, now: datetime) -> list[dict]:
                 "category": classify_category(title, summary),
                 "title": title,
                 "source": config.name,
-                "published": humanize_published(
-                    metadata.get("published_at"),
-                    now,
-                ),
+                "published": humanize_published(metadata.get("published_at"), now),
                 "published_at": metadata.get("published_at"),
                 "summary": summary or f"Revisa la publicación original de {config.name}.",
-                "image_url": (
-                    metadata.get("image_url", "")
-                    if config.allow_external_image
-                    else ""
-                ),
+                "image_url": metadata.get("image_url", "") if config.allow_external_image else "",
                 "url": final_url,
                 "source_priority": config.source_priority,
                 "is_fallback": False,
